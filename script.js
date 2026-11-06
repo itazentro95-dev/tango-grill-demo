@@ -314,21 +314,206 @@
     revealEls.forEach(function (el) { el.classList.add("is-in"); });
   }
 
-  /* Gentle hero parallax (transform only) */
-  var heroImg = document.querySelector(".hero-img");
-  if (heroImg && !reduceMotion) {
-    var ticking = false;
-    window.addEventListener("scroll", function () {
-      if (!ticking) {
-        window.requestAnimationFrame(function () {
-          var y = window.scrollY;
-          if (y < window.innerHeight) {
-            heroImg.style.transform = "scale(1.06) translateY(" + (y * 0.12) + "px)";
-          }
-          ticking = false;
-        });
-        ticking = true;
+  /* Depth system (elevation): layered ember fields, scroll parallax
+     planes, in-frame figure parallax, pointer tilt on dishes.
+     Transform/opacity only, one shared rAF loop, paused off-screen,
+     and never constructed at all under reduced motion. */
+  if (!reduceMotion) {
+    var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+    function emberSprite(rgb) {
+      var c = document.createElement("canvas");
+      c.width = 64; c.height = 64;
+      var g = c.getContext("2d");
+      var grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, "rgba(255,240,214,1)");
+      grad.addColorStop(0.25, "rgba(" + rgb + ",0.9)");
+      grad.addColorStop(1, "rgba(" + rgb + ",0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      return c;
+    }
+
+    function EmberField(canvas, total) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext("2d");
+      this.total = total;
+      this.parts = [];
+      this.w = 0; this.h = 0;
+      this.sprites = [
+        emberSprite("228,87,46"),   /* ember */
+        emberSprite("233,180,76"),  /* gold */
+        emberSprite("199,57,43")    /* deep red */
+      ];
+      this.resize();
+    }
+    EmberField.prototype.resize = function () {
+      var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      var r = this.canvas.getBoundingClientRect();
+      this.w = Math.max(1, Math.round(r.width));
+      this.h = Math.max(1, Math.round(r.height));
+      this.canvas.width = Math.round(this.w * dpr);
+      this.canvas.height = Math.round(this.h * dpr);
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!this.parts.length) this.seed();
+    };
+    EmberField.prototype.seed = function () {
+      /* Three depth planes: far = small, dim, slow; near = large,
+         brighter, faster. Size + speed + alpha sell the depth. */
+      var layers = [
+        { share: 0.42, size: [1.5, 3.5], speed: [6, 12], alpha: [0.10, 0.28], sprite: 2 },
+        { share: 0.36, size: [3, 6], speed: [12, 22], alpha: [0.25, 0.50], sprite: 0 },
+        { share: 0.22, size: [5, 10], speed: [20, 36], alpha: [0.40, 0.75], sprite: 1 }
+      ];
+      var rnd = function (a, b) { return a + Math.random() * (b - a); };
+      this.parts = [];
+      for (var li = 0; li < layers.length; li++) {
+        var L = layers[li];
+        var n = Math.round(this.total * L.share);
+        for (var i = 0; i < n; i++) {
+          this.parts.push({
+            x: Math.random(), y: Math.random(),
+            size: rnd(L.size[0], L.size[1]),
+            speed: rnd(L.speed[0], L.speed[1]),
+            alpha: rnd(L.alpha[0], L.alpha[1]),
+            sprite: L.sprite,
+            sway: rnd(4, 14),
+            phase: rnd(0, Math.PI * 2),
+            flick: rnd(0.6, 1.6)
+          });
+        }
       }
-    }, { passive: true });
+    };
+    EmberField.prototype.step = function (t, dt) {
+      var ctx = this.ctx, w = this.w, h = this.h;
+      ctx.clearRect(0, 0, w, h);
+      ctx.globalCompositeOperation = "lighter";
+      for (var i = 0; i < this.parts.length; i++) {
+        var p = this.parts[i];
+        p.y -= (p.speed * dt) / h;
+        if (p.y < -0.04) { p.y = 1.04; p.x = Math.random(); }
+        var x = (p.x * w) + Math.sin(t * 0.0004 * p.flick + p.phase) * p.sway;
+        var y = p.y * h;
+        var a = p.alpha * (0.72 + 0.28 * Math.sin(t * 0.002 * p.flick + p.phase));
+        ctx.globalAlpha = Math.max(0, a);
+        var s = p.size * 3; /* sprite carries the soft falloff */
+        ctx.drawImage(this.sprites[p.sprite], x - s / 2, y - s / 2, s, s);
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    };
+
+    var hero = document.querySelector(".hero");
+    var heroImg = document.querySelector(".hero-img");
+    var heroCanvas = document.getElementById("heroEmbers");
+    var heroInner = document.querySelector(".hero-inner");
+    var figCanvas = document.getElementById("figEmbers");
+    var heroField = heroCanvas ? new EmberField(heroCanvas, window.innerWidth < 720 ? 34 : 62) : null;
+    var figField = figCanvas ? new EmberField(figCanvas, 14) : null;
+
+    /* Fields only draw while their section is on screen. */
+    var view = { hero: false, fig: false };
+    if ("IntersectionObserver" in window) {
+      var vio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.target === hero) view.hero = e.isIntersecting;
+          else view.fig = e.isIntersecting;
+        });
+      }, { rootMargin: "80px" });
+      if (hero) vio.observe(hero);
+      var parFig = document.querySelector(".parrilla-fig");
+      if (parFig) vio.observe(parFig);
+    } else { view.hero = true; view.fig = true; }
+
+    /* Pointer parallax over the hero (desktop, fine pointer only). */
+    var px = 0, py = 0, tx = 0, ty = 0;
+    if (hero && finePointer) {
+      hero.addEventListener("pointermove", function (e) {
+        var r = hero.getBoundingClientRect();
+        tx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+        ty = ((e.clientY - r.top) / r.height - 0.5) * 2;
+      });
+      hero.addEventListener("pointerleave", function () { tx = 0; ty = 0; });
+    }
+
+    /* In-frame parallax images (fire section + patron room). */
+    var plxImgs = document.querySelectorAll(".parrilla-fig img, .patron-fig img");
+
+    /* Perspective tilt on dish cards (fine pointer only; the mobile
+       swipe rail is never touched). */
+    var tiltCards = [];
+    if (finePointer) {
+      document.querySelectorAll(".dish").forEach(function (card) {
+        var st = { el: card, cx: 0, cy: 0, gx: 0, gy: 0, active: false };
+        card.addEventListener("pointerenter", function () {
+          st.active = true;
+          card.classList.add("tilt-live");
+        });
+        card.addEventListener("pointermove", function (e) {
+          var r = card.getBoundingClientRect();
+          st.gy = ((e.clientX - r.left) / r.width - 0.5) * 10;
+          st.gx = -((e.clientY - r.top) / r.height - 0.5) * 10;
+        });
+        card.addEventListener("pointerleave", function () {
+          st.gx = 0; st.gy = 0; st.active = false;
+        });
+        tiltCards.push(st);
+      });
+    }
+
+    var lastT = 0;
+    function frame(t) {
+      var dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
+      lastT = t;
+      var y = window.scrollY || 0;
+      var vh = window.innerHeight;
+
+      /* Hero planes separate as you scroll: photo 0.12, embers 0.05,
+         content slightly against the scroll (-0.03). */
+      if (y < vh * 1.2) {
+        if (heroImg) heroImg.style.transform = "scale(1.06) translateY(" + (y * 0.12).toFixed(1) + "px)";
+        px += (tx - px) * 0.06;
+        py += (ty - py) * 0.06;
+        if (heroCanvas) heroCanvas.style.transform = "translate3d(" + (px * 10).toFixed(1) + "px," + (y * 0.05 + py * 8).toFixed(1) + "px,0)";
+        if (heroInner) heroInner.style.transform = "translate3d(" + (px * -6).toFixed(1) + "px," + (y * -0.03 + py * -5).toFixed(1) + "px,0)";
+      }
+      if (heroField && view.hero) heroField.step(t, dt);
+      if (figField && view.fig) figField.step(t, dt);
+
+      for (var i = 0; i < plxImgs.length; i++) {
+        var img = plxImgs[i];
+        var r = img.parentElement.getBoundingClientRect();
+        if (r.bottom > -80 && r.top < vh + 80) {
+          var prog = (r.top + r.height / 2 - vh / 2) / vh;
+          if (prog > 1) prog = 1;
+          if (prog < -1) prog = -1;
+          img.style.transform = "scale(1.14) translateY(" + (-prog * 16).toFixed(1) + "px)";
+        }
+      }
+
+      for (var j = 0; j < tiltCards.length; j++) {
+        var st = tiltCards[j];
+        st.cx += (st.gx - st.cx) * 0.12;
+        st.cy += (st.gy - st.cy) * 0.12;
+        if (st.active || Math.abs(st.cx) > 0.01 || Math.abs(st.cy) > 0.01) {
+          st.el.style.transform = "perspective(900px) rotateX(" + st.cx.toFixed(2) + "deg) rotateY(" + st.cy.toFixed(2) + "deg)";
+        } else if (st.el.style.transform) {
+          st.el.style.transform = "";
+          st.el.classList.remove("tilt-live");
+        }
+      }
+
+      window.requestAnimationFrame(frame);
+    }
+    window.requestAnimationFrame(frame);
+
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(function () {
+        if (heroField) heroField.resize();
+        if (figField) figField.resize();
+      }, 200);
+    });
   }
 })();

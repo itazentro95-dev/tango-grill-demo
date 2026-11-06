@@ -36,6 +36,7 @@
     <div class="hero-media" aria-hidden="true">
       <img class="hero-img" src="assets/hero-parrilla.webp" alt="" fetchpriority="high">
       <div class="hero-shade"></div>
+      <canvas class="hero-embers" id="heroEmbers"></canvas>
     </div>
     <div class="hero-inner">
       <p class="hero-rating reveal">
@@ -116,6 +117,7 @@
       </div>
       <figure class="parrilla-fig reveal">
         <img src="assets/grill-fire.webp" alt="Pièces de bœuf sur la grille d’une parrilla, au-dessus des flammes" loading="lazy">
+        <canvas class="fig-embers" id="figEmbers" aria-hidden="true"></canvas>
         <figcaption class="fig-tag" data-i18n="par_tag">Sur le feu, à la commande</figcaption>
       </figure>
     </div>
@@ -180,7 +182,7 @@
         <p class="menu-intro" data-i18n="menu_intro">Les plats ci-dessous sont ceux que les convives décrivent dans leurs avis et les guides. La carte complète se découvre sur place ou par téléphone.</p>
       </div>
 
-      <div class="board reveal">
+      <div class="board reveal reveal-3d">
         <div class="board-group">
           <h3 class="board-cat" data-i18n="cat_1">Entrées</h3>
           <div class="mi">

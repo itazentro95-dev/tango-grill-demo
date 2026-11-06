@@ -168,10 +168,10 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--gold);outline-offse
 .stat{border-top:4px solid var(--ember);padding:12px 0 0}
 .stat-num{font-variant-numeric:tabular-nums;font-family:var(--font-display);font-size:2.1rem;letter-spacing:.03em;color:var(--gold);line-height:1;display:block}
 .stat-label{font-size:.92rem;color:var(--bone-dim);font-variant-numeric:tabular-nums}
-.parrilla-fig{margin:0;position:relative}
-.parrilla-fig img{width:100%;height:100%;min-height:300px;object-fit:cover;border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.parrilla-fig{margin:0;position:relative;overflow:hidden;border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.parrilla-fig img{width:100%;height:100%;min-height:300px;object-fit:cover}
 .fig-tag{
-  position:absolute;left:14px;bottom:14px;
+  position:absolute;left:14px;bottom:14px;z-index:2;
   background:var(--tag-bg);color:var(--gold);
   font-size:.82rem;font-weight:600;
   padding:8px 14px;border-radius:999px;border:1px solid var(--line);
@@ -237,8 +237,8 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--gold);outline-offse
 /* Patron */
 .patron{background:var(--char)}
 .patron-grid{display:grid;gap:36px}
-.patron-fig{margin:0;position:relative}
-.patron-fig img{width:100%;height:100%;min-height:300px;object-fit:cover;border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.patron-fig{margin:0;position:relative;overflow:hidden;border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.patron-fig img{width:100%;height:100%;min-height:300px;object-fit:cover}
 .patron-copy p{color:var(--bone-dim);max-width:56ch;margin-top:16px}
 .chips-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:24px}
 .chips-list li{
@@ -356,6 +356,27 @@ html.js .hero-img{transform:scale(1.06)}
   .rating-panel{flex-direction:column;align-items:flex-start;gap:8px}
 }
 
+/* Depth system (elevation) — layered ember planes, in-frame parallax,
+   perspective tilt. Transform/opacity only; driven from script.js and
+   fully disabled under prefers-reduced-motion below. */
+.hero-embers{
+  position:absolute;left:0;top:-9%;width:100%;height:118%;
+  pointer-events:none;will-change:transform;
+}
+.parrilla-fig img,.patron-fig img{transform:scale(1.14);will-change:transform}
+.fig-embers{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:1;
+}
+html.js .reveal.reveal-3d{
+  transform:perspective(1100px) rotateX(7deg) translateY(30px);
+  transform-origin:50% 0;
+}
+html.js .reveal.reveal-3d.is-in{transform:perspective(1100px) rotateX(0deg) translateY(0)}
+@media (hover:hover) and (pointer:fine){
+  .dish.tilt-live{transition:none;box-shadow:var(--shadow)}
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -363,4 +384,7 @@ html.js .hero-img{transform:scale(1.06)}
   html.js .hero-title .line{animation:none}
   html.js .hero-img{transform:none}
   .btn,.chip,.lang-btn,.topbar-call,.hero-rotate .rotator{transition:none}
+  .hero-embers,.fig-embers{display:none}
+  .parrilla-fig img,.patron-fig img{transform:none}
+  html.js .reveal.reveal-3d{transform:none}
 }
